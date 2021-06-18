@@ -498,9 +498,15 @@ class CannotMerge(Exception):
         return args[0]
 
 
+
+class GitlabRejected(CannotMerge):
+    def __init__(self):
+        super(GitlabRejected, self).__init__(
+            "Merge request was rejected by Gitlab, try again later"
+        )
+
 class SkipMerge(CannotMerge):
     pass
-
 
 class GitLabRebaseResultMismatch(CannotMerge):
     def __init__(self, gitlab_sha, expected_sha):

@@ -3,9 +3,11 @@ import logging as log
 import time
 from datetime import datetime
 
+from retry import retry
+
 from . import git, gitlab
 from .commit import Commit
-from .job import CannotMerge, GitLabRebaseResultMismatch, MergeJob, SkipMerge
+from .job import CannotMerge, GitLabRebaseResultMismatch, MergeJob, SkipMerge, GitlabRejected
 
 
 class SingleMergeJob(MergeJob):
@@ -40,6 +42,7 @@ class SingleMergeJob(MergeJob):
             self.unassign_from_mr(merge_request)
             raise
 
+    @retry(GitlabRejected, tries=3, delay=10)
     def update_merge_request_and_accept(self, approvals):
         api = self._api
         merge_request = self._merge_request
@@ -101,7 +104,8 @@ class SingleMergeJob(MergeJob):
                 # unexpected went wrong in either case, we expect the user to
                 # explicitly re-assign to marge (after resolving potential
                 # problems)
-                raise CannotMerge('Merge request was rejected by GitLab: %r' % err.error_message) from err
+                raise GitlabRejected() from err
+
             except gitlab.Unauthorized as err:
                 log.warning('Unauthorized!')
                 raise CannotMerge('My user cannot accept merge requests!') from err
@@ -146,7 +150,7 @@ class SingleMergeJob(MergeJob):
                     ) from ex
             except gitlab.ApiError as err:
                 log.exception('Unanticipated ApiError from GitLab on merge attempt')
-                raise CannotMerge('had some issue with GitLab, check my logs...') from err
+                raise CannotMerge('GitLab, please try again later...') from err
             else:
                 self.wait_for_branch_to_be_merged()
                 updated_into_up_to_date_target_branch = True
